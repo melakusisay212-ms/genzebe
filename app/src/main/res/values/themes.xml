@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Genzebe" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/ground</item>
+        <item name="android:statusBarColor">@color/ground</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="Theme.Genzebe.Transparent" parent="android:Theme.Translucent.NoTitleBar" />
+</resources>
