@@ -1,3 +1,4 @@
+
 package com.genzebe.app.ui
 
 import android.app.Application
@@ -57,24 +58,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     var onboardingDone by mutableStateOf(prefs.onboardingDone)
         private set
-    var ethiopianClock by mutableStateOf(prefs.ethiopianClock)
-        private set
-    var hideBalance by mutableStateOf(prefs.hideBalance)
-        private set
+
+    // Private backing states prevent JVM setter name conflicts.
+    private var _ethiopianClock by mutableStateOf(prefs.ethiopianClock)
+    val ethiopianClock: Boolean
+        get() = _ethiopianClock
+
+    private var _hideBalance by mutableStateOf(prefs.hideBalance)
+    val hideBalance: Boolean
+        get() = _hideBalance
+
     var importState: ImportState by mutableStateOf(ImportState.Idle)
         private set
+
     var notice: String? by mutableStateOf(null)
         private set
 
-    private fun buildAccounts(txs: List<TxEntity>, rows: List<AccountEntity>): List<AccountUi> {
+    private fun buildAccounts(
+        txs: List<TxEntity>,
+        rows: List<AccountEntity>
+    ): List<AccountUi> {
         val byAccount = txs.groupBy { it.accountKey }
+
         return rows.map { account ->
             val mine = byAccount[account.accountKey].orEmpty()
+
             val latest = mine.filter { it.balanceAfterCents != null }
                 .maxWithOrNull(compareBy<TxEntity>({ it.occurredAt }, { it.id }))
+
             val manual = account.manualBalanceCents
             val manualAt = account.manualAtMillis
-            val useManual = manual != null && manualAt != null && (latest == null || manualAt >= latest.occurredAt)
+
+            val useManual = manual != null && manualAt != null &&
+                (latest == null || manualAt >= latest.occurredAt)
+
             AccountUi(
                 accountKey = account.accountKey,
                 label = account.label,
@@ -88,12 +105,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setEthiopianClock(value: Boolean) {
         prefs.ethiopianClock = value
-        ethiopianClock = value
+        _ethiopianClock = value
     }
 
     fun setHideBalance(value: Boolean) {
         prefs.hideBalance = value
-        hideBalance = value
+        _hideBalance = value
     }
 
     fun clearNotice() {
@@ -108,31 +125,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun finishOnboarding(mode: String) {
         val now = System.currentTimeMillis()
+
         val since = if (mode == Prefs.START_MONTH) {
             val eth = EthiopianCalendar.today(now)
             EthiopianCalendar.startOfMonthMillis(eth.year, eth.month)
         } else {
             now
         }
+
         prefs.startMode = mode
         prefs.startFromMillis = since
         prefs.onboardingDone = true
         onboardingDone = true
-        if (mode == Prefs.START_MONTH && InboxImporter.hasPermission(app)) importInbox(since)
+
+        if (mode == Prefs.START_MONTH && InboxImporter.hasPermission(app)) {
+            importInbox(since)
+        }
     }
 
     /** Reads the SMS inbox from [sinceMillis]. Safe to run again: duplicates are skipped. */
     fun importInbox(sinceMillis: Long) {
         viewModelScope.launch {
             importState = ImportState.Running(0, 0)
+
             try {
                 val items = InboxImporter.read(app, sinceMillis)
+
                 val summary = repo.ingestAll(items) { done, total ->
                     importState = ImportState.Running(done, total)
                 }
+
                 importState = ImportState.Done(summary)
             } catch (e: Exception) {
-                importState = ImportState.Failed(e.message ?: "Could not read messages")
+                importState = ImportState.Failed(
+                    e.message ?: "Could not read messages"
+                )
             }
         }
     }
@@ -140,7 +167,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Re-reads this Ethiopian month from the inbox. */
     fun importThisMonth() {
         val eth = EthiopianCalendar.today()
-        importInbox(EthiopianCalendar.startOfMonthMillis(eth.year, eth.month))
+        importInbox(
+            EthiopianCalendar.startOfMonthMillis(eth.year, eth.month)
+        )
     }
 
     fun dismissImportResult() {
@@ -166,7 +195,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setBalance(accountKey: String, cents: Long) {
-        viewModelScope.launch { repo.setManualBalance(accountKey, cents, System.currentTimeMillis()) }
+        viewModelScope.launch {
+            repo.setManualBalance(
+                accountKey,
+                cents,
+                System.currentTimeMillis()
+            )
+        }
     }
 
     fun clearAll() {
@@ -179,7 +214,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Adds one SMS pasted or copied by the user. */
     fun addPastedMessage(text: String) {
         viewModelScope.launch {
-            val outcome = withContext(Dispatchers.IO) { repo.ingest(null, text, System.currentTimeMillis()) }
+            val outcome = withContext(Dispatchers.IO) {
+                repo.ingest(null, text, System.currentTimeMillis())
+            }
+
             notice = when (outcome) {
                 IngestOutcome.ADDED -> "Message saved"
                 IngestOutcome.DUPLICATE -> "Already saved"
@@ -191,10 +229,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportCsv(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
-            val labels = accounts.value.associate { it.accountKey to it.label }
+            val labels = accounts.value.associate {
+                it.accountKey to it.label
+            }
+
             val text = CsvExport.build(transactions.value, labels)
+
             try {
-                app.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                app.contentResolver.openOutputStream(uri)?.use {
+                    it.write(text.toByteArray(Charsets.UTF_8))
+                }
+
                 notice = "Exported ${transactions.value.size} transactions"
             } catch (e: Exception) {
                 notice = "Could not save the file"
